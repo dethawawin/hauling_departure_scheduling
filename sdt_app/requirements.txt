@@ -1,6 +1,5 @@
-streamlit
-streamlit_option_menu
-pandas
-xlsxwriter
-plotly.express
-BytesIO
+pandas==1.5.3
+plotly==5.9.0
+streamlit==1.40.2
+streamlit_option_menu==0.4.0
+XlsxWriter==3.2.0
