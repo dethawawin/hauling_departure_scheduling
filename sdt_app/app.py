@@ -193,7 +193,7 @@ if selected_page == "Homepage":
     5. The system validates the tonnage target against available truck capacity.
     6. Generate and view the departure schedule.
     """)
- 
+
 if selected_page == "Create a New Schedule":
     st.title("Create a New Schedule")
     st.write("Fill in the details below to create a new schedule for the Side Dump Truck.")
@@ -207,99 +207,116 @@ if selected_page == "Create a New Schedule":
 
     if uploaded_file:
         try:
-            data = pd.read_excel(uploaded_file)
+            # Debugging information about uploaded file
+            st.write("File type:", type(uploaded_file))
+            st.write("File name:", uploaded_file.name)
+            st.write("File size:", uploaded_file.size)
+
+            # Load the uploaded file
+            data = pd.read_excel(BytesIO(uploaded_file.getvalue()))
+            st.write("File successfully read.")
+
+            # Validate columns
             required_columns = {"truckID", "capacity"}
+            st.write("Uploaded file columns:", list(data.columns))
             if not required_columns.issubset(data.columns):
                 st.error(f"Error: Missing required columns {required_columns - set(data.columns)} in the uploaded file.")
-                st.session_state.is_valid = False
-            else:
-                st.write("Uploaded RFU Data Preview:")
-                data.index = range(1, len(data) + 1)
-                st.dataframe(data.head(5))
-                capacities = data['capacity']
-                truck_ids = data['truckID'].tolist()
-                max_trips_per_truck = 2
-                max_capacity = sum(capacities * max_trips_per_truck)
+                st.stop()
 
-                hauling_target = st.number_input(
-                    f"Input Hauling Tonnage Target (maximum {max_capacity:.2f} tons):",
-                    min_value=0,
-                    max_value=max_capacity,
-                    key="tonnage_target"
+            # Check if the file is empty
+            if data.empty:
+                st.error("Error: Uploaded file is empty.")
+                st.stop()
+
+            # Validate data types
+            if not pd.api.types.is_numeric_dtype(data['capacity']):
+                st.error("Error: 'capacity' column must contain numeric values.")
+                st.stop()
+            if not pd.api.types.is_string_dtype(data['truckID']):
+                st.error("Error: 'truckID' column must contain text values.")
+                st.stop()
+
+            # File is valid, display a preview
+            st.write("Uploaded RFU Data Preview:")
+            data.index = range(1, len(data) + 1)
+            st.dataframe(data.head(5))
+
+            capacities = data['capacity']
+            truck_ids = data['truckID'].tolist()
+            max_trips_per_truck = 2
+            max_capacity = sum(capacities * max_trips_per_truck)
+
+            hauling_target = st.number_input(
+                f"Input Hauling Tonnage Target (maximum {max_capacity:.2f} tons):",
+                min_value=0,
+                max_value=max_capacity,
+                key="tonnage_target"
+            )
+
+            if hauling_target > max_capacity:
+                st.error(f"Error: Hauling target exceeds maximum capacity of {max_capacity:.2f} tons.")
+                st.stop()
+            elif hauling_target <= 0:
+                st.error("Error: Hauling target must be greater than 0.")
+                st.stop()
+            
+            st.session_state.is_valid = True
+
+            if st.button("Generate Schedule", type="primary") and st.session_state.is_valid:
+                updated_stages = {
+                    "Travelling to Stockpile": 68.5,
+                    "Loading": 9.2,
+                    "Hauling": 141.4,
+                    "Gross-Scaling": 3.08,
+                    "Dumping": 5.07,
+                    "Tare-Scaling": 1.82,
+                    "Travelling to Workshop": 42.5,
+                    "Break": 30
+                }
+                warna_aktivitas = {
+                    "Travelling to Stockpile": "gold",
+                    "Loading": "steelblue",
+                    "Hauling": "forestgreen",
+                    "Gross-Scaling": "blueviolet",
+                    "Dumping": "red",
+                    "Tare-Scaling": "orange",
+                    "Travelling to Workshop": "coral",
+                    "Break": "gray"
+                }
+
+                # Generate schedule table
+                schedule_table = generate_schedule_table(
+                    truck_ids=truck_ids,
+                    capacities=capacities,
+                    hauling_target=hauling_target,
+                    max_trips_per_truck=max_trips_per_truck,
+                    updated_stages=updated_stages,
+                    shift=shift
                 )
+                schedule_table.index = range(1, len(schedule_table) + 1)
 
-                if hauling_target > max_capacity:
-                    st.error(f"Error: Hauling target exceeds maximum capacity of {max_capacity:.2f} tons.")
-                    st.session_state.is_valid = False
-                elif hauling_target <= 0:
-                    st.error("Error: Hauling target must be greater than 0.")
-                    st.session_state.is_valid = False
-                else:
-                    st.session_state.is_valid = True
+                # Store results in session state
+                st.session_state.schedule_table = schedule_table
+                st.session_state.updated_stages = updated_stages
+                st.session_state.warna_aktivitas = warna_aktivitas
 
-                if st.button("Generate Schedule", type="primary") and st.session_state.is_valid:
-                    updated_stages = {
-                        "Travelling to Stockpile": 68.5,
-                        "Loading": 9.2,
-                        "Hauling": 141.4,
-                        "Gross-Scaling": 3.08,
-                        "Dumping": 5.07,
-                        "Tare-Scaling": 1.82,
-                        "Travelling to Workshop": 42.5,
-                        "Break": 30
-                    }
-                    warna_aktivitas = {
-                        "Travelling to Stockpile": "gold",
-                        "Loading": "steelblue",
-                        "Hauling": "forestgreen",
-                        "Gross-Scaling": "blueviolet",
-                        "Dumping": "red",
-                        "Tare-Scaling": "orange",
-                        "Travelling to Workshop": "coral",
-                        "Break": "gray"
-                    }
+                st.markdown("---")
+                st.subheader("PT XYZ - Coal Hauling SDT Departure Schedule")
+                st.dataframe(schedule_table, use_container_width=True)
 
-                    # Generate schedule table
-                    max_trips_per_truck = 2
-                    schedule_table = generate_schedule_table(
-                        truck_ids=truck_ids,
-                        capacities=capacities,
-                        hauling_target=hauling_target,
-                        max_trips_per_truck=max_trips_per_truck,
-                        updated_stages=updated_stages,
-                        shift=shift
-                    )
-                    schedule_table.index = range(1, len(schedule_table) + 1)
-
-                    # Store results in session state
-                    st.session_state.schedule_table = schedule_table
-                    st.session_state.updated_stages = updated_stages
-                    st.session_state.warna_aktivitas = warna_aktivitas
-
-                    st.markdown("---")
-                    st.subheader("PT XYZ - Coal Hauling SDT Departure Schedule")
-                    #st.dataframe(schedule_table)
-                    st.dataframe(schedule_table, use_container_width=True)
-
-                    # Generate and display Gantt chart using Plotly
-                    st.subheader("Interactive Gantt Chart")
-                    gantt_chart_figure = generate_gantt_chart(
-                        schedule_table=schedule_table,
-                        updated_stages=updated_stages,
-                        warna_aktivitas=warna_aktivitas,
-                        shift=shift,
-                        selected_date=date
-                    )
-                    st.plotly_chart(gantt_chart_figure, use_container_width=True)
-
-                    
+                # Generate and display Gantt chart using Plotly
+                st.subheader("Interactive Gantt Chart")
+                gantt_chart_figure = generate_gantt_chart(
+                    schedule_table=schedule_table,
+                    updated_stages=updated_stages,
+                    warna_aktivitas=warna_aktivitas,
+                    shift=shift,
+                    selected_date=date
+                )
+                st.plotly_chart(gantt_chart_figure, use_container_width=True)
 
         except Exception as e:
             st.error(f"Error reading the uploaded file. Please check the file format. Details: {str(e)}")
-
-        if st.session_state.is_valid and st.session_state.schedule_figure is not None:
-            st.pyplot(st.session_state.schedule_figure)
-           
 
     # Clear all button
     if st.session_state.schedule_table is not None:
