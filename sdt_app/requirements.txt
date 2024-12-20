@@ -4,4 +4,3 @@ pandas
 xlsxwriter
 plotly.express
 io
-datetime
