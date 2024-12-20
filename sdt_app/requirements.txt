@@ -4,3 +4,4 @@ pandas
 xlsxwriter
 plotly.express
 openpyxl
+io
